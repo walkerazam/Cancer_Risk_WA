@@ -1,0 +1,155 @@
+---
+title: "Mapping Cancer Risk in Washington State"
+author: |
+  | Walker Azam
+  | STAT/CSSS 554 Course Project
+output:
+  date: '`r Sys.Date()`'
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center',tidy=TRUE,
+               tidy.opts=list(blank=TRUE, width.cutoff=70,strip.white=TRUE),
+               warning=FALSE,cache=FALSE)
+```
+
+```{r setup, eval=T}
+# Loading Libraries
+library(RColorBrewer) # creates nice color schemes
+library(classInt)     # finds class intervals for continuous variables
+library(ggplot2)
+library(rgdal)
+library(SUMMER)
+library(maps)
+library(maptools)
+library(dplyr)
+library(sf)
+```
+
+## Introduction
+
+In this project I will be  mapping and predicting Cancer risk in Washington state at a census tract level. 
+
+As noted by the Cancer Statistics Center from teh American Cancer Society, there are over 441 incident cases for cancer per 100,000 people living in Washington State, 2015-2019, and an estimated 44,630 new cases for 2023. In an effort to better understand possible environmental covariate factors of cancer rates in the state, and possibly inform resource allocation and plan interventions, I would like to perform disease mapping based on exposure covariates. Personal exposure information such as individuals' diets, genetics, or smoking habits will not be considered. Rather the purpose of the project is to understand if there are environmental risk exposures such as Air Quality, or harmful chemical exposures that may have an effect on Cancer risk. Moreover, the project will aim to highlight whether particular areas in Washington state are at high risk for cancer, which can result in more specific future studies to elucidate any potential reasons and interventions.
+
+## Data Background
+
+The data used in this project are collected from WA state resources, all publicly available online for use. Primarily the Cancer Incident counts are retrieved from the Washington State Department of Health's source for environmental public health data the Washington Tracking Network (WTN). All Cancer type incidences were selected for this project, occuring in a 5 Year Interval bewteen 2015-2019, for both Sexes. The counts are based on the residential address for the patient at the time of diagnosis, which may not account of types of cancers that have longer latency periods -- which is a limitation of this study. The data provided is relavtively reliable, however there are 10 census tracts that have data suppressed to protect confidentiality. Since this comprises of 0.7% of the complete data, they were considered as 0 cases for the purposes of this project.
+
+```{r read-data, fig.height=4.5, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE, results='hide', fig.keep='all', fig.cap="WA State Census Tract Map"}
+# Reading in WA state Census Tract Shapefiles
+# Data from: https://ofm.wa.gov/washington-data-research/population-demographics/gis-data/census-geographic-files
+washington <- rgdal::readOGR(dsn="tract10",layer="tract10")
+plot(washington, main="Washington Census Tracts")
+```
+
+Washington has 1458 Census Tracts. From first figure it is apparent that the area between these census tracts are highly uneven. We can see that most of the tracts near the Seattle Metropolitan Area are small and dense, closeby the Puget Sound. In contrast, most of the central and eastern tracts are large and rural, just past the cascade mountain range. The far east areas are also larger, close to the Olympic national mountains. 
+
+```{r read-data}
+# Converting WA census tract to a polygon DF
+wmap <- SpatialPolygons(washington@polygons) # getting Geometries
+washington$geometry <- st_as_sfc(wmap) # adding geometry column
+wmap <- st_as_sf(washington)
+# selecting important columns
+wmap <- wmap[,c("GEOID10", "TRACTCE10", "INTPTLON10", "INTPTLAT10", "geometry")]
+```
+
+Now lets read in cancer incidence counts from 2015-2019:
+
+```{r read-cancer}
+# Reading cancer data (pre-cleaned)
+cancer <- read.csv("Cancer_Incidence_2015-2019.csv", header = TRUE)
+# Selecting Columns
+cancer <- cancer[, c("County.Name", "Census.Tract.ID", "Count", "Population")]
+# Assigning NULL values to 0
+cancer$Count[cancer$Count == 'NULL'] <- 0
+# Merging with spatial object
+merge <- merge(cancer, wmap, by.x='Census.Tract.ID', by.y='GEOID10')
+wa <- st_as_sf(merge)
+```
+
+Trying to map population from 2015-2019:
+```{r population-map, fig.height=6.5, fig.cap="WA State Population Map, 2015-2019"}
+pal = function(n) brewer.pal(n, "Oranges")
+plot(wa["Population"], pal = pal, nbreaks = 8, breaks = "equal", lwd=0.5,
+     main="Washington State's Population", sub='Combined Census Tract Population from 2015-2019')
+```
+
+As aforementioned, this project will look at Washington State's population from 2015-2019, aggregated by census tracts, and pulled from the WTN. This includes combined age groups and sexes. The total count for the population between 2015-2019 combined is 36,529,390. We can see from the map of the populations that the Seattle Metro Area is by far the most populated areas which is expected. All regions near the Puget Sound have high populations in general, such as King and Pierce County. We can also see a trend where the smaller census tract regions have much higher populations. There are some regions of high density away from the Seattle Metro Area, such as near Spokane in the East and Grant County, however most regions in the center, far west, and east are relatively rural and sparsely populated. 
+
+Now mapping the raw counts of Cancer Incidences from 2015-2019:
+```{r cancer-raw-map, fig.height=6.5, fig.cap="Raw Cancer Incidences, 2015-2019"}
+pal = function(n) brewer.pal(n, "Purples")
+# Assigning it to be Numeric
+wa$Count <- as.numeric(wa$Count)
+plot(wa["Count"], pal = pal, nbreaks = 8, breaks = "equal", lwd=0.5,
+     main="Washington State Cancer Incidence Counts", sub='All Cancer Types, 2015-2019')
+```
+
+Looking at the map for the raw count of Cancer incidences in the state between 2015-2019, we see a general concordance between areas of high population and areas of high cancer incidence counts, as expected. For example, general the large regions in the center-east have low incidence counts. However, we can see some standout regions. For example some of the census tracts in Clallam county (North-west), where the Olympic National Parks are, have highest counts (more than King County/Seattle). Also in Gray's Harbor county, on the Western Border of the map, we see a census tract with a high raw count. Generally, this map shows a trend where regions West of the Cascade mountains have a higher incidence of Cancer than those towards the East.
+
+```{r table-1, fig.cap="Table for Totals from 2015-2019"}
+table <- cbind('Population Total' = 36529390, 'Case Total' = 211597)
+knitr::kable(table)
+```
+
+The maps shown and discussed so far represent raw counts for population and cancer incidences, and do not take into account any form of spatial smoothing. This is important for sparse areas, where counts may be unreliable. The response variable in this study would be Cancer prevalence across all age groups in WA state, and a  Poisson distribution will be assumed for the disease. Even taking the combined counts for all Cancer types, the disease is relatively rare compared to the entire combined population for the project (See Table 1). The standardized morbidity rates (SMR) will be extrapolated from the incidence counts since morbidity data is much harder to acquire.  
+
+
+```{r,eval=T}
+library(INLA)
+# Fit Poisson-Lognormal model in INLA:
+model.fit0 <- inla(Count ~ 1 + f(ZIPcode, model="iid"), data=tomap, family="poisson", E=Population)
+```
+
+We can map the IID posterior medians of the relative risks:
+```{r, echo=TRUE, fig.height=4.5, fig.cap="Posterior Medians for Relative Risk with default priors", eval=T}
+# Extracting the posterior medians using our fitted model
+tomap$fit0fitted <- model.fit0$summary.fitted.values$`0.5quant`
+# Mapping our results
+pal = function(n) brewer.pal(n,"Purples")
+plot(tomap["fit0fitted"], pal = pal, nbreaks = 8, breaks = "equal", main="Map of Posterior Medians")
+```
+
+
+We have to first create a neighbor matrix:
+```{r}
+library(prioritizr) # Allows us to create an adjacency matrix
+# compute adjacency matrix
+sf_use_s2(FALSE)
+mat <- adjacency_matrix(tomap)  
+# Setting row and col name to HRA names in our neighbor matrix
+colnames(mat) <- rownames(mat) <- tomap$County
+mat <- as.matrix(mat[1:dim(mat)[1], 1:dim(mat)[1]])
+```
+
+
+```{r}
+# Assigning a region column with a numeric identifier
+tomap$region <- 1:nrow(tomap)
+# Running INLA with given specifications
+formula <- Count ~ 1 + f(region, model="bym2", graph=mat, scale.model=T, constr=T,
+                         hyper=list(phi=list(prior="pc", param=c(0.5, 0.5), initial=1), prec=list(prior="pc.prec", param=c(0.3,0.01),initial=5)))
+
+model.fit1 <- inla(formula, data=tomap, family="poisson",E=Population, control.predictor=list(compute=TRUE),
+                   control.compute=list(return.marginals.predictor=TRUE, config = TRUE))
+
+model.fit1$summary.fixed[,1:5]
+model.fit1$summary.hyper[,1:5]
+```
+
+```{r,  fig.height=4.5, eval=T}
+pal = function(n) brewer.pal(n,"Purples")
+plot(tomap["fit0fitted"], pal = pal, nbreaks = 8, breaks = "equal", main="Map of Posterior Medians")
+
+tomap$model1fitted <- model.fit1$summary.fitted.values$`0.5quant`
+plot(tomap["model1fitted"], pal = pal, nbreaks=8, breaks = "equal", main="Map of Posterior Medians (Spatial BYM2 Model)")
+```
+
+
+
+
+

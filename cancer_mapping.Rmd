@@ -27,6 +27,8 @@ library(maps)
 library(maptools)
 library(dplyr)
 library(sf)
+library(INLA)
+library(prioritizr)
 ```
 
 ## Introduction
@@ -69,6 +71,8 @@ cancer$Count[cancer$Count == 'NULL'] <- 0
 # Merging with spatial object
 merge <- merge(cancer, wmap, by.x='Census.Tract.ID', by.y='GEOID10')
 wa <- st_as_sf(merge)
+# drop areas with 0 population (Water)
+wa <- filter(wa, Population > 0)
 ```
 
 Trying to map population from 2015-2019:
@@ -96,5 +100,71 @@ table <- cbind('Population Total' = 36529390, 'Case Total' = 211597)
 knitr::kable(table)
 ```
 
-The maps shown and discussed so far represent raw counts for population and cancer incidences, and do not take into account any form of spatial smoothing. This is important for sparse areas, where counts may be unreliable. The response variable in this study would be Cancer prevalence across all age groups in WA state, and a  Poisson distribution will be assumed for the disease. Even taking the combined counts for all Cancer types, the disease is relatively rare compared to the entire combined population for the project (See Table 1). The standardized morbidity rates (SMR) will be extrapolated from the incidence counts since morbidity data is much harder to acquire.  
+The maps shown and discussed so far represent raw counts for population and cancer incidences, and do not take into account any form of spatial smoothing. This is important for sparse areas, where counts may be unreliable. The response variable in this study would be Cancer prevalence across all age groups in WA state, and a  Poisson distribution will be assumed for the disease. Even taking the combined counts for all Cancer types, the disease is relatively rare compared to the entire combined population for the project (See Table 1). 
 
+The standardized morbidity rates (SMR) will be extrapolated from the incidence counts since morbidity data is much harder to acquire. To find the SMRs for each region, we can assume $Y_i$ and $E_i$, $i = 1,...,n$, denote the observed counts for the combined population in region $i$, $i = 1,...,n$. Assuming $SMR = Y_i/E_i$, we can observe how this naive map would look with no spatial effects. 
+
+```{r SMR-map, echo=TRUE, fig.height=6.5, fig.cap="SMR for Cancer in WA, 2015-2019", eval=T}
+# Adding SMR column
+wa$SMR <- wa$Count/wa$Population
+pal = function(n) brewer.pal(n, "BuPu")
+plot(wa["SMR"], pal = pal, nbreaks = 8, breaks = "equal", main="SMR Map", lwd=0.5)
+pal = function(n) brewer.pal(n, "BuPu")
+wa$se <- sqrt(wa$SMR/wa$Population)
+plot(wa["se"], pal = pal, nbreaks = 8, breaks = "equal", main="SMR Map Standard Errors", lwd=0.5)
+```
+Observations:
+
+- The east generally has less Cancer prevalence than the west does. Prevalence is most concentrated near the north-eastern regions of the map. Larger regions in the east have higher prevalence than those in the west, indicating that its not too dependent on how rural and urban an area is.
+
+- SMRs generally range from 0 - 0.016, with a median value of 0.005. This is not too large of a range, but possibly the larger SMRs may be due to sparseness. There is a chance that these results are from sampling variation rather than true variation.
+
+- Standard Errors are relatively low for the high density such as King and Pierce county. Instead we see highest SE in less populated tracts near the North and the West of the Seattle Metro Area, such as in Mason and western-Skagit county. Some of the regions with highest SMRs, in East-Jefferson, Kitsap, and King county have relatively low SEs. 
+
+## IID Estimates:
+
+Prior to any spatial smoothing, we can assume a simple IID model for INLA to observed what posterior medians for prevalence would be. This can be extracted using a Poisson-Lognormal model in INLA, and taking no additional covariates. Here the denominator is the Population per region i.
+```{r inla-iid,eval=T}
+# Fit Poisson-Lognormal model in INLA:
+model.fit0 <- inla(Count ~ 1 + f(Census.Tract.ID, model="iid"), data=wa, family="poisson", E=Population)
+```
+
+We can map the IID posterior medians of the relative risks and associated posterior standard deviations:
+```{r, echo=TRUE, fig.height=6.5, fig.cap="Posterior Medians for Relative Risk with default priors", eval=T}
+# Extracting the posterior medians using our fitted model
+wa$fit0fitted <- model.fit0$summary.fitted.values$`0.5quant`
+wa$fit0se <- model.fit0$summary.fitted.values$`sd`
+# Mapping our results
+pal = function(n) brewer.pal(n,"BuPu")
+plot(wa["fit0fitted"], pal = pal, nbreaks = 8, breaks = "equal", main="Map of Posterior Medians (IID)", lwd=0.5)
+plot(wa["fit0se"], pal = pal, nbreaks = 8, breaks = "equal", main="Posterior Standard Deviations", lwd=0.5)
+```
+
+Just assuming a simple IID model already shows a contrast to the plot of $Y_i$ counts prior. The trend where Eastern Washington had less prevalence than Western Washington is more apparent above. The regions near the Puget Sound and north close to the Salish Sea have relatively higher prevalence. Regions in the center/center-west continue to have lower prevalence rates in contrast. 
+
+```{r comparing-errors-1, fig.height=4.5, fig.width=4.5}
+# Plotting standard deviations vs standard errors
+ggplot(data.frame(psd=model.fit0$summary.fitted.values$`sd`,se=wa$se),
+       aes(y=psd,x=se)) + geom_point() + labs(y="IID Standard Deviation",x="SMR Standard Error", 
+                                              title='IID Posterior Standard Deviations vs. Standard Errors of SMRs') +
+  theme(plot.title = element_text(hjust = 0.5)) + geom_abline(intercept=0,slope=1,color="red") #+ xlim(0,0.0025) + ylim(0,0.0025)
+```
+Observations:
+
+- IID calculates Standard Deviations for areas with 0 cases, which explains the Benton County outlier with the highest errors.
+
+- Generally we see a lot of alignment in Error between the IID model and the SMR SEs. We see more shrinkage at the high extremes for SMR errors above 0.001
+
+- There is also slight shrinkage close to 0, to a lesser extent.
+
+## BYM2 Spatial Smoothing
+
+We have to first create a neighbor matrix:
+```{r adjmatrix}
+# compute adjacency matrix
+#sf_use_s2(FALSE)
+mat <- adjacency_matrix(wa)  
+# Setting row and col name to HRA names in our neighbor matrix
+colnames(mat) <- rownames(mat) <- wa$Census.Tract.ID
+mat <- as.matrix(mat[1:dim(mat)[1], 1:dim(mat)[1]])
+```

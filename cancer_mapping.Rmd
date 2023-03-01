@@ -3,17 +3,19 @@ title: "Mapping Cancer Risk in Washington State"
 author: |
   | Walker Azam
   | STAT/CSSS 554 Course Project
+  | Date: March 13, 2023
 output:
-  date: '`r Sys.Date()`'
   pdf_document: default
   html_document: default
 ---
 
-```{r setup, include=FALSE}
+```{r setup-md, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 library(knitr)
-opts_chunk$set(message=FALSE, collapse=TRUE,fig.align='center',tidy=TRUE,
-               tidy.opts=list(blank=TRUE, width.cutoff=70,strip.white=TRUE),
-               warning=FALSE,cache=FALSE)
+# Setting up RMarkdown
+opts_chunk$set(collapse = TRUE, fig.align = "center", tidy = TRUE, 
+               tidy.opts = list(blank = TRUE, width.cutoff = 60, 
+                                strip.white = TRUE), warning = FALSE, 
+               message = FALSE, cache = FALSE, echo=FALSE)
 ```
 
 ```{r setup, eval=T}
@@ -33,13 +35,13 @@ library(prioritizr)
 
 ## Introduction
 
-In this project I will be  mapping and predicting Cancer risk in Washington state at a census tract level. 
+In this project I will be mapping and predicting Cancer risk in Washington state at a census tract level. 
 
 As noted by the Cancer Statistics Center from teh American Cancer Society, there are over 441 incident cases for cancer per 100,000 people living in Washington State, 2015-2019, and an estimated 44,630 new cases for 2023. In an effort to better understand possible environmental covariate factors of cancer rates in the state, and possibly inform resource allocation and plan interventions, I would like to perform disease mapping based on exposure covariates. Personal exposure information such as individuals' diets, genetics, or smoking habits will not be considered. Rather the purpose of the project is to understand if there are environmental risk exposures such as Air Quality, or harmful chemical exposures that may have an effect on Cancer risk. Moreover, the project will aim to highlight whether particular areas in Washington state are at high risk for cancer, which can result in more specific future studies to elucidate any potential reasons and interventions.
 
 ## Data Background
 
-The data used in this project are collected from WA state resources, all publicly available online for use. Primarily the Cancer Incident counts are retrieved from the Washington State Department of Health's source for environmental public health data the Washington Tracking Network (WTN). All Cancer type incidences were selected for this project, occuring in a 5 Year Interval bewteen 2015-2019, for both Sexes. The counts are based on the residential address for the patient at the time of diagnosis, which may not account of types of cancers that have longer latency periods -- which is a limitation of this study. The data provided is relavtively reliable, however there are 10 census tracts that have data suppressed to protect confidentiality. Since this comprises of 0.7% of the complete data, they were considered as 0 cases for the purposes of this project.
+The data used in this project are collected from WA state resources, all publicly available online for use. Primarily the Cancer Incident counts are retrieved from the Washington State Department of Health's source for environmental public health data the Washington Tracking Network (WTN). All Cancer type incidences were selected for this project, occurring in a 5 Year Interval between 2015-2019, for both Sexes. The counts are based on the residential address for the patient at the time of diagnosis, which may not account of types of cancers that have longer latency periods -- which is a limitation of this study. The data provided is relavtively reliable, however there are 10 census tracts that have data suppressed to protect confidentiality. Since this comprises of 0.7% of the complete data, they were considered as 0 cases for the purposes of this project.
 
 ```{r read-data, fig.height=4.5, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE, results='hide', fig.keep='all', fig.cap="WA State Census Tract Map"}
 # Reading in WA state Census Tract Shapefiles
@@ -50,7 +52,7 @@ plot(washington, main="Washington Census Tracts")
 
 Washington has 1458 Census Tracts. From first figure it is apparent that the area between these census tracts are highly uneven. We can see that most of the tracts near the Seattle Metropolitan Area are small and dense, closeby the Puget Sound. In contrast, most of the central and eastern tracts are large and rural, just past the cascade mountain range. The far east areas are also larger, close to the Olympic national mountains. 
 
-```{r read-data}
+```{r sp-data}
 # Converting WA census tract to a polygon DF
 wmap <- SpatialPolygons(washington@polygons) # getting Geometries
 washington$geometry <- st_as_sfc(wmap) # adding geometry column
@@ -95,7 +97,7 @@ plot(wa["Count"], pal = pal, nbreaks = 8, breaks = "equal", lwd=0.5,
 
 Looking at the map for the raw count of Cancer incidences in the state between 2015-2019, we see a general concordance between areas of high population and areas of high cancer incidence counts, as expected. For example, general the large regions in the center-east have low incidence counts. However, we can see some standout regions. For example some of the census tracts in Clallam county (North-west), where the Olympic National Parks are, have highest counts (more than King County/Seattle). Also in Gray's Harbor county, on the Western Border of the map, we see a census tract with a high raw count. Generally, this map shows a trend where regions West of the Cascade mountains have a higher incidence of Cancer than those towards the East.
 
-```{r table-1, fig.cap="Table for Totals from 2015-2019"}
+```{r table-1, fig.cap="Table for Totals from 2015-2019", message=FALSE, warning=FALSE}
 table <- cbind('Population Total' = 36529390, 'Case Total' = 211597)
 knitr::kable(table)
 ```
@@ -121,6 +123,17 @@ Observations:
 
 - Standard Errors are relatively low for the high density such as King and Pierce county. Instead we see highest SE in less populated tracts near the North and the West of the Seattle Metro Area, such as in Mason and western-Skagit county. Some of the regions with highest SMRs, in East-Jefferson, Kitsap, and King county have relatively low SEs. 
 
+Table 2 shows the 10 tracts with the highest SMRs for Cancer, and also the associated Standard Errors and County names. We see that Clallam County has the tracts with the highest SMRs among the top 10 areas, making it a a region that potentially could use deeper study or interventions.
+
+```{r, echo=TRUE, eval=T, fig.cap="Tracts with Highest SMRs"}
+# Viewing a table of the tracts with highest SMRs
+top10 <- head(arrange(wa,desc(SMR)), n = 10)
+top10 <- subset(top10, select = c("County.Name", "Census.Tract.ID", "SMR", "se"))
+top10 <- st_drop_geometry(top10)
+colnames(top10) <- c('County','Census Tract ID','SMR', 'Standard Error')
+knitr::kable(top10)
+```
+
 ## IID Estimates:
 
 Prior to any spatial smoothing, we can assume a simple IID model for INLA to observed what posterior medians for prevalence would be. This can be extracted using a Poisson-Lognormal model in INLA, and taking no additional covariates. Here the denominator is the Population per region i.
@@ -142,6 +155,23 @@ plot(wa["fit0se"], pal = pal, nbreaks = 8, breaks = "equal", main="Posterior Sta
 
 Just assuming a simple IID model already shows a contrast to the plot of $Y_i$ counts prior. The trend where Eastern Washington had less prevalence than Western Washington is more apparent above. The regions near the Puget Sound and north close to the Salish Sea have relatively higher prevalence. Regions in the center/center-west continue to have lower prevalence rates in contrast. 
 
+```{r, echo=TRUE, eval=T, fig.cap="Tracts with Highest IID Posterior Medians"}
+# Viewing a table of the tracts with highest PMs
+top10 <- head(arrange(wa,desc(fit0fitted)), n = 10)
+top10 <- subset(top10, select = c("County.Name", "Census.Tract.ID", "fit0fitted", "fit0se"))
+top10 <- st_drop_geometry(top10)
+colnames(top10) <- c('County','Census Tract ID','Posterior Median', 'Posterior St. Dev.')
+knitr::kable(top10)
+```
+
+Table Observations:
+
+- We see that same top 9 Census Tracts for the IID model and the SMRs. Only the Island County tract from Table 2 is replaced by Jefferson County's Tract in the IID model.
+
+- The Posterior Median values are also pretty similar to the SMRs calculated for the top ten highest prevalence census tracts.
+
+- Clallam, Jefferson, and Skagit counties remain the highest priorty counties for interventions.
+
 ```{r comparing-errors-1, fig.height=4.5, fig.width=4.5}
 # Plotting standard deviations vs standard errors
 ggplot(data.frame(psd=model.fit0$summary.fitted.values$`sd`,se=wa$se),
@@ -159,7 +189,8 @@ Observations:
 
 ## BYM2 Spatial Smoothing
 
-We have to first create a neighbor matrix:
+To better account for spatial smoothing towards neighboring areas, I will specify a BYM2 model for INLA instead of an IID model. The neighbor matrix for WA state census tracts is constructed using the ``prioritizr`` package in R.
+
 ```{r adjmatrix}
 # compute adjacency matrix
 #sf_use_s2(FALSE)

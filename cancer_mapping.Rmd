@@ -199,3 +199,80 @@ mat <- adjacency_matrix(wa)
 colnames(mat) <- rownames(mat) <- wa$Census.Tract.ID
 mat <- as.matrix(mat[1:dim(mat)[1], 1:dim(mat)[1]])
 ```
+
+
+```{r BYM2-nocovars, message=FALSE, warning=FALSE}
+# Assigning a region column with a numeric identifier
+wa$region <- 1:nrow(wa)
+# Running INLA with given specifications (no covariates)
+formula <- Count ~ 1 + f(region, model="bym2", graph=mat, scale.model=T, constr=T,
+                         hyper=list(phi=list(prior="pc", param=c(0.5, 0.5), initial=1), prec=list(prior="pc.prec", param=c(0.3,0.01),initial=5)))
+
+model.fit1 <- inla(formula, data=wa, family="poisson",E=Population, control.predictor=list(compute=TRUE),
+                   control.compute=list(return.marginals.predictor=TRUE, config = TRUE))
+
+model.fit1$summary.fixed[,1:5]
+model.fit1$summary.hyper[,1:5]
+```
+```{r}
+1/sqrt(model.fit1$summary.hyper[1,4])
+model.fit1$summary.hyper[2,4]
+```
+
+Using a BYM2 model with INLA, with no covariates considered, the $\beta_0$ the posterior median is -5.239477 and the 95% interval is -5.25082 to -5.228175. The posterior median of the total standard variance of random effects is: `r 1/sqrt(model.fit1$summary.hyper[1,4])` and the posterior median for the proportion of the residual variation that is spatial $\phi$ is: `r model.fit1$summary.hyper[2,4]`. 
+
+[Question]: The proportion of the total variance attributed to the spatial random effect is 0.76. Is that a significant amount? Can I reasonably say that there is a spatial component to Cancer incidences in the state?
+
+```{r BYM2-plot1, echo=TRUE, fig.height=6.5, fig.cap="Posterior Medians for BYM2 Model", eval=T}
+pal = function(n) brewer.pal(n,"BuPu")
+# Extracting posterior median values and sd
+wa$model1fitted <- model.fit1$summary.fitted.values$`0.5quant`
+wa$fit1se <- model.fit1$summary.fitted.values$`sd`
+
+# plotting
+plot(wa["model1fitted"], pal = pal, nbreaks=8, breaks = "equal", main="Map of Posterior Medians (Spatial BYM2 Model)")
+plot(wa["fit1se"], pal = pal, nbreaks = 8, breaks = "equal", main="Posterior Standard Deviations", lwd=0.5)
+```
+
+The effects of spatial smoothing is apparent in the North-West regions, where the relative risks are 'shared' between neighboring census tracts. Moreover all the regions towards the west have similar prevalence overall. We can extrapolate from this model that Cancer Incidence prevalence is concentrated in areas towards the northwest, closest to the Puget Sound/Salish Sea. As you extend further into the south-east, these rates are much lower. 
+
+
+```{r comparing-errors-2, fig.height=4.5}
+library(gridExtra)
+# Plotting standard deviations vs standard errors
+p1 <- ggplot(data.frame(psd=wa$fit1se,se=wa$se),
+       aes(y=psd,x=se)) + geom_point() + labs(y="BYM2 Standard Deviation",x="SMR Standard Error", 
+                                              title='BYM2 Posterior Standard Deviations vs. Standard Errors of SMRs') +
+  theme(plot.title = element_text(hjust = 0.5)) + geom_abline(intercept=0,slope=1,color="red") + xlim(0, 0.0025) + ylim(0, 0.002)
+
+p2 <- ggplot(data.frame(psd=wa$fit1se,se=wa$fit0se),
+       aes(y=psd,x=se)) + geom_point() + labs(y="BYM2 Standard Deviation",x="IID Standard Deviation", 
+                                              title='Posterior St. Dev BYM2 vs. IID') +
+  theme(plot.title = element_text(hjust = 0.5)) + geom_abline(intercept=0,slope=1,color="red") + xlim(0, 0.0025) + ylim(0, 0.002)
+grid.arrange(grobs = list(p1, p2), ncol = 2)
+```
+Observations:
+
+- Compared to the SMR Standard Error and the Posterior St Devs. from the IID model, the BYM2 model has the lowest errors. We can observe shrinkage, which is most apparent for high error areas
+
+- In General BYM2 is pretty aligned to both the SMR/IID errors, but does well too reduce the errors for high error areas, presumably due to spatial smoothing using neighbor matrix.
+
+```{r, fig.height=4, fig.width=4}
+# Plotting Posterior Median vs SMR
+ggplot(data.frame(pmedian=model.fit1$summary.fitted.values$`0.5quant`,SMR=wa$SMR),
+       aes(y=pmedian,x=SMR, size = wa$se)) + geom_point(alpha = 0.5) + labs(y="Posterior Median",x="SMR") + 
+  labs(y="Posterior Median",x="SMR", title='Posterior Median Relative Risk against SMR') +
+  theme(plot.title = element_text(hjust = 0.5)) + geom_abline(intercept=0,slope=1,color="red") #+ xlim(0,2.5) + ylim(0,2.5)
+```
+Compared to the calculated SMR values, the Posterior Medians from the BYM2 model is very similar. Again, we can notice some shrinkage, and also correction for regions with 0 cases reported. In addition to the known reduced errors, the BYM2 model provides a more reliable model for Cancer incidence relative risks.
+
+
+## Covariates
+
+Having established a reliable BYM2 model for Cancer Prevalence in WA state, covariates can be introduced to understand exposure effects in regions, and the relationship it has to cancer relative risks. The covariates that this study will consider are the following:
+
+1. PM2.5 Concentration (2014-2017): https://fortress.wa.gov/doh/wtn/WTNPortal/#!q0=4734 
+
+2. Toxic Release from Facilities (2018-2020): https://fortress.wa.gov/doh/wtn/WTNPortal/#!q0=4732 
+
+3. Housing Lead Exposure Risk (2015-2019): https://fortress.wa.gov/doh/wtn/WTNPortal/#!q0=722 

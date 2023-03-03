@@ -276,3 +276,40 @@ Having established a reliable BYM2 model for Cancer Prevalence in WA state, cova
 2. Toxic Release from Facilities (2018-2020): https://fortress.wa.gov/doh/wtn/WTNPortal/#!q0=4732 
 
 3. Housing Lead Exposure Risk (2015-2019): https://fortress.wa.gov/doh/wtn/WTNPortal/#!q0=722 
+
+It should be noted that these covariates where measured at different time intervals and ranges. The Housing Lead Exposure risk falls in the same interval as the Cancer Incidence counts. However the PM2.5 concentrations and Toxic Releases have different intervals. PM2.5 have a 3 year span for collecting concentrations, whereas the Toxic Releases are across a 2 year span.
+
+```{r read-covariates}
+# Reading PM2.5
+pm2.5 <- read.csv("PM2.5_Concentration.csv", header = TRUE)
+colnames(pm2.5) <- c('County.Name',' Year.Group','Census.Tract.ID', 'PM.Concentration', 'IBL.Rank')
+pm2.5 <- pm2.5[, c('Census.Tract.ID', 'PM.Concentration')]
+# Reading in Toxicity
+toxic <- read.csv("Toxic_Releases_from_Facilities.csv", header = TRUE)
+colnames(toxic) <- c('County.Name','Census.Tract.ID', 'RSEI.Concentration', 'IBL.Rank')
+toxic <- toxic[, c('Census.Tract.ID', 'RSEI.Concentration')]
+
+# Reading in Lead Exposure
+lead <- read.csv("Lead_Risk_from_Housing.csv", header = TRUE)
+colnames(lead) <- c('County.Name','Census.Tract.ID', 'Units.Lead', 'Housing.Units', 'Percent.Units', 'IBL.Rank')
+lead <- lead[, c('Census.Tract.ID', 'Units.Lead')]
+
+wa2 <- merge(wa, pm2.5)
+wa2 <- merge(wa2, toxic)
+wa2 <- merge(wa2, lead)
+```
+
+```{r ICAR-Covars}
+# Adding all three covariates
+formula <- Count ~ 1 + PM.Concentration + f(region, model="bym2", graph=mat, scale.model=T, constr=T,
+                         hyper=list(phi=list(prior="pc", param=c(0.5, 0.5), initial=1), prec=list(prior="pc.prec", param=c(0.3,0.01),initial=5)))
+
+model.fit2 <- inla(formula, data=wa2, family="poisson",E=Population, control.predictor=list(compute=TRUE),
+                   control.compute=list(return.marginals.predictor=TRUE, config = TRUE))
+
+model.fit2$summary.fixed[,1:5]
+model.fit2$summary.hyper[,1:5]
+```
+Applying PM2.5 Concentrations as a covariate in our spatial model, the posterior mean for the intercept is -5.09. The posterior median for the relative risk associated with a unit increase in PM2.5 concentration is ``r round(exp(model.fit2$summary.fixed[2,4]), 3)``, which is $exp(\beta_1)|y = exp(-0.34)$. The 95% credible interval for the relative risk $exp(\beta_1)$ is [``r round(exp(model.fit2$summary.fixed[2,3]), 2)``, ``r round(exp(model.fit2$summary.fixed[2,5]), 2)``].
+
+The posterior median of $\sigma_e$ is ``r 1/sqrt(model.fit2$summary.hyperpar[1, 4])`` with a 95% interval of [``r c(1/sqrt(model.fit2$summary.hyperpar[1, 5])), 1/sqrt(model.fit2$summary.hyperpar[1, 3]))``].

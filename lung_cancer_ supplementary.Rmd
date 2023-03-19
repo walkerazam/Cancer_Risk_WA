@@ -33,12 +33,13 @@ library(prioritizr)
 library(truncnorm)
 ```
 
-
+## WA State County Names Reference:
 ```{r, echo = FALSE, warning = FALSE, message = FALSE, results = FALSE}
 # Reading in WA state County Shapefiles
 # Data from: https://geo.wa.gov/datasets/wadnr::wa-county-boundaries/explore?location=47.182649%2C-120.817600%2C7.57
 washington <- rgdal::readOGR(dsn="WA_County_Boundaries",layer="WA_County_Boundaries")
 ```
+![WA State County Names (Source: DSHS.WA.gov)](WA_County_Boundaries/WA_County_Names.png)
 
 ```{r sp-data, echo = FALSE, warning = FALSE, message = FALSE}
 # Converting WA census tract to a polygon DF
@@ -76,6 +77,7 @@ wa$SMR <- wa$Count/wa$Expected
 wa$se <- sqrt(wa$SMR/wa$Expected)
 ```
 
+\newpage
 ## IID Estimates:
 
 
@@ -100,6 +102,7 @@ pal = function(n) brewer.pal(n,"BuPu")
 plot(wa["fit0fitted"], pal = pal, nbreaks = 8, breaks = "equal", main=NULL)
 plot(wa["fit0se"], pal = pal, nbreaks = 8, breaks = "equal", main=NULL)
 ```
+
 
 ## Supplementary Code Appendix
 

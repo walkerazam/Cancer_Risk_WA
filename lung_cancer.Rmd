@@ -44,7 +44,9 @@ I will specifically be looking at cancer deaths in males, per county, aggregate 
 
 ## Shapefiles
 
-Washington State county shapefiles are readily available online. The shaprfiles used for this study were from OpenData Washington State Department of Natural Resources (WADNR), available here: https://geo.wa.gov/datasets/wadnr::wa-county-boundaries/explore?location=47.182649%2C-120.817600%2C7.57
+Washington State county shapefiles are readily available online. The shapefiles used for this study were from OpenData Washington State Department of Natural Resources (WADNR), available here: https://geo.wa.gov/datasets/wadnr::wa-county-boundaries/explore?location=47.182649%2C-120.817600%2C7.57.
+
+A reference of all county names and locations is included in the Supplementary Materials (Supplementary Figure 1). County names will be used in this study to highlight areas of particular interest, but general locations relative to WA state will also be provided to highlight any spatial trends found.
 
 ## Cancer Mortality Data
 
@@ -137,7 +139,7 @@ knitr::kable(table, caption = "Counts")
 
 Looking at the raw counts of mortality, and the population for WA state, we can see the highest numbers around specific areas of high population within the state. Particularly the Seattle Metro Area, which consists of King, Pierce, and Snohomish County is highly populated and located in close to the center of the state, west of the Cascade Mountains. Spokane County on the eastern border, and Clark county in the south east are also higher in population. Generally, Central and Eastern Washington are more rural. The Western border of the state from Pacific to Clallam county are also sparsely populated. The population and mortality count maps shown represent raw counts for population and cancer incidences, and do not take into account any form of spatial smoothing. This is important for sparse areas, where counts may be unreliable. 
 
-The response variable in this study would be Cancer prevalence across all age groups in WA state, and a Poisson distribution will be assumed for the disease. Even taking the combined counts for all Cancer types, the disease is relatively rare compared to the entire combined population for the project (Table 1). A Poisson-Lognormal model in `INLA` will generally be considered for this case.
+The response variable in this study would be lung & bronchus cancer deaths for males in WA state, and a Poisson distribution will be assumed for the disease. The disease is relatively rare compared to the entire combined population for the project (Table 1). A Poisson-Lognormal model in `INLA` will consequently be considered for this case, as a Poisson distribution is the most appropriate sampling distribution to assume for this study.
 
 # Results
 
@@ -172,7 +174,7 @@ colnames(top10) <- c('County', 'SMR', 'Standard Error')
 knitr::kable(top10, caption = "5 Counties with Highest SMRs")
 ```
 
-Looking at the SMRs for Lung cancer in males (Fig 3) shows contrast to the population and count maps (Fig 1&2). We can see that the Seattle Metro Area counties have generally lower SMR's, near or below 1 - indicating lower risk. The counties on the western border have relatively higher SMRs in contrast, with Jefferson county having the highest in the State. Most of central WA has low SMRs, with a slightly higher regions in the northeast. Klickitat & Skamania counties in the south also have high SMRs. Looking at the errors (Fig 4), we can see the northeast regions have high errors, possibly due to being rural and sparse. Regions near King, Pierce and Snohomish county all have really small errors. The western boundary counties also have moderate errors. Table 2 shows the 10 tracts with the highest SMRs for Male Lung Cancer, and also the associated Standard Errors and County Names. Jefferson, Pacific, Clallam and San Juan counties all appear to have high SMRs and are located in the west boundary of the state. Smoothing can ideally lower the errors, and create a model that better reflects spatial relationships that these models don't.
+Looking at the SMRs for Lung cancer in males (Fig 2A) shows contrast to the population and count maps (Fig 1). We can see that the Seattle Metro Area counties have generally lower SMR's, near or below 1 - indicating lower risk. The counties on the western border have relatively higher SMRs in contrast, with Jefferson county having the highest in the State. Most of central WA has low SMRs, with a slightly higher regions in the northeast. Klickitat & Skamania counties in the south also have high SMRs. Looking at the errors (Fig 2B), we can see the northeast regions have high errors, possibly due to being rural and sparse. Regions near King, Pierce and Snohomish county all have really small errors. The western boundary counties also have moderate errors. Table 2 shows the 10 tracts with the highest SMRs for Male Lung Cancer, and also the associated Standard Errors and County Names. Jefferson, Pacific, Clallam and San Juan counties all appear to have high SMRs and are located in the west boundary of the state. Smoothing can ideally lower the errors, and create a model that better reflects spatial relationships that these models don't.
 
 ## IID Estimates:
 
@@ -193,7 +195,7 @@ model.fit0 <- inla(Count ~ 1 + f(County, model="iid"),
 # Showing results as a table
 iid_results <- data.frame("Posterior Median"=c(model.fit0$summary.fixed$`0.5quant`, 1/sqrt(model.fit0$summary.hyper$`0.5quant`)),
                      "Lower CI"=c(model.fit0$summary.fixed$`0.025quant`, 1/sqrt(model.fit0$summary.hyper$`0.975quant`)),
-                     "Upper CI"=c(model.fit0$summary.fixed$`0.975quant`, 1/sqrt(model.fit0$summary.hyper$`0.025quant`)))
+                     "Upper CI"=c(model.fit0$summary.fixed$`0.975quant`, 1/sqrt(model.fit0$summary.hyper$`0.025quant`)), check.names = F)
 rownames(iid_results) = c("Beta","Sigma")
 knitr::kable(round(iid_results,2), "simple", caption = "Poission Lognormal Non-Spatial")
 ```
@@ -226,7 +228,7 @@ Just assuming a non-spatial IID model shows some contrast to the plot of $Y_i$ c
 
 ## BYM2 Spatial Smoothing
 
-To leverage neighboring areas influence a spatial model will be looked at, that uses BYM2 spatial smoothing. The neighbor matrix for WA state census tracts is constructed using the ``prioritizr`` package in R. Default priors are assumed for this study. The spatial results table shows that the $\beta$ value (0.27) is similar to the non-spatial model (0.28), but with smaller confidence intervals. The total variance of random effects is 0.07, and a total variance 0.77 is coming from spatial random effects. The proportion of variance attributed to spatial effects has a wide 95% interval from 0.13 to 0.99. 
+To leverage neighboring areas influence a spatial model will be looked at, that uses BYM2 spatial smoothing. The neighbor matrix for WA state census tracts is constructed using the ``prioritizr`` package in R. Default priors are assumed for this study. The spatial results (Table 4) shows that the $\beta$ value (0.27) is similar to the non-spatial model (0.28), but with smaller confidence intervals. The total variance of random effects is 0.07, and a total variance 0.77 is coming from spatial random effects. The proportion of variance attributed to spatial effects has a wide 95% interval from 0.13 to 0.99. 
 
 ```{r adjmatrix}
 # compute adjacency matrix
@@ -275,7 +277,7 @@ plot(wa["model1fitted"], pal = pal, nbreaks=8, breaks = "equal", main=NULL)
 plot(wa["fit1se"], pal = pal, nbreaks = 8, breaks = "equal", main=NULL)
 ```
 
-The effects of spatial smoothing is apparent in the North-West regions, where the relative risks are 'shared' between neighboring census tracts (Fig 6). We see these regions have lower contrast in relative risks as a result. This makes the western boundary of the state hot-spots for higher prevalence of lung cancer, extending into the south-west counties such as Pacific, Lewis, Skamania, and Kickitat. The northeastern counties have slightly lower risks, borrowing from the central counties with really low estimates. So Pend-Oreille, Stevens, and Ferry have lower relative risks as a result. Figure 7A shows much lower errors than the SMR model, which is expected given smoothing.
+The effects of spatial smoothing is apparent in the North-West regions, where the relative risks are 'shared' between neighboring census tracts (Fig 4A). We see these regions have lower contrast in relative risks as a result. This makes the western boundary of the state hot-spots for higher prevalence of lung cancer, extending into the south-west counties such as Pacific, Lewis, Skamania, and Kickitat. The northeastern counties have slightly lower risks, borrowing from the central counties with really low estimates. So Pend-Oreille, Stevens, and Ferry have lower relative risks as a result. Figure 4B shows much lower errors than the SMR model, which is expected given smoothing.
 
 ```{r, fig.cap='Comparing Spatial Model Risk to SMR', out.width='40%'}
 # Plotting Posterior Median vs SMR
@@ -299,7 +301,7 @@ p3 <- ggplot(data.frame(psd=wa$fit1se, se=wa$fit0se),
 grid.arrange(grobs = list(p2, p3), ncol = 2)
 ```
 
-Figure 8 can confirm these differences. We see most shrinkage for relative risks for high error counties (which generally also had high SMRs). At the lowest end, we see some increase in estimates too. Figure 7B shows reduction in errors, similar to the non-spatial model. When comparing the spatial poisson lognormal model to the non-spatial (Fig 7C), we see relative alignment, with differing values at the higher end of errors. Generally the spatial model slightly reduces errors for the western and southwest counties, whereas the non-spatial model has lower errors for the northeastern counties. Given the general high risk found along the western counties (Pacific, Jefferson, Clallam), I would suggest the spatial model would be more suitable.
+Figure 5 can confirm these differences. We see most shrinkage for relative risks for high error counties (which generally also had high SMRs). At the lowest end, we see some increase in estimates too. Figure 6A shows reduction in errors, similar to the non-spatial model. When comparing the spatial poisson lognormal model to the non-spatial (Fig 6B), we see relative alignment, with differing values at the higher end of errors. Generally the spatial model slightly reduces errors for the western and southwest counties, whereas the non-spatial model has lower errors for the northeastern counties. Given the general high risk found along the western counties (Pacific, Jefferson, Clallam), I would suggest the spatial model would be more suitable.
 
 ## Spatial Model with Covariates
 
@@ -379,7 +381,7 @@ plot(wa["fit2se"], pal = pal, nbreaks = 8, breaks = "equal", main=NULL)
 
 Mapping the relative risks for counties using the spatial covariate model (Figure 8), there is alignment with most counties' prevalence to spatial model (Figure 4A). However, the estimates for Clallam and Ferry county appear slightly higher. Looking at Figure 7A, we can confirm similarities in Relative Risks between the two models, with slight differences on a county specific basis. 
 
-Overall Fig. 8A shows spatial smoothing, maintaining higher prevalences in the eastern border of the state, and and northwestern corner. The Seattle metro area (where most of the population resides) maintains a low risk, as does most of the central and eastern counties. Figure 7B and 8B show that most county errors remain the same as the non-covariate model (Fig 4B). However, there is actually a reduction in errors in counties with spatial standard deviations of 0.2 or higher, when adding covariates (Fig 4B). This is most notable in the western counties of Jefferson and Pacific, and the northeastern counties of Ferry and Pend Oreille (Fig 8B). 
+Overall Figure 8A shows spatial smoothing, maintaining higher prevalences in the eastern border of the state, and and northwestern corner. The Seattle metro area (where most of the population resides) maintains a low risk, as does most of the central and eastern counties. Figure 7B and 8B show that most county errors remain the same as the non-covariate model (Fig 4B). However, there is actually a reduction in errors in counties with spatial standard deviations of 0.2 or higher, when adding covariates (Fig 4B). This is most notable in the western counties of Jefferson and Pacific, and the northeastern counties of Ferry and Pend Oreille (Fig 8B). 
 
 \newpage
 # Discussion

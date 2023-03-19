@@ -23,17 +23,19 @@ To calculate the expected cases of death from Lung & Bronchus Cancer in male pop
 
 # Repository Structure
 
+```bash
 .
 ├── Docs
-│   ├── Mapping Male Lung Cancer Risk in WA.pdf
-│   └── Supplementary Materials.pdf
+│   ├── 'Mapping Male Lung Cancer Risk in WA.pdf'
+│   └── 'Supplementary Materials.pdf'
 ├── README.md
 └── src 
-    ├── *.csv --> csv data files
-    ├── WA_County_Boundaries --> Contains shapefiles
+    ├── *.csv : csv data files
+    ├── WA_County_Boundaries : Contains shapefiles
     ├── lung_cancer.Rmd
     ├── lung_cancer_supplementary.Rmd
     ├── rcode_cancer.R
     └── rcode_supplementary.R
+```
     
 Note: Rmd files contains R code with markdown text. R code files contain raw code ran for analysis. 

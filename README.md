@@ -19,4 +19,21 @@ I will specifically be looking at cancer deaths in males, per county, aggregate 
 
 To calculate the expected cases of death from Lung & Bronchus Cancer in male populations, the Age Adjusted Rate per 100,000 was utilized, which was also provided by the Washington State Department of Health's WTN. The age-adjusted rate was derived from The National Cancer Institute’s Surveillance Epidemiology and End Results (SEER). 4 model variations will be compared for mapping prevalence of male lung cancer mortality in Washington state, and evaluated for appropriateness.These models will be used to indicate counties that appear to have the highest risk for male lung cancer, for which resources and public health planning can allocate resources or possible interventions. The models include Standard Morbidity Ratio (SMR), IID models, spatial (BYM2) models, and spatial models with covariates. 
 
-For the full report, results, and data background please refer to the `docs` folder, where a pdf copy of the paper and supplementary materials can be found.
+**For the full report, results, and data background please refer to the `docs` folder, where a pdf copy of the paper and supplementary materials can be found.**
+
+# Repository Structure
+
+.
+├── Docs
+│   ├── Mapping Male Lung Cancer Risk in WA.pdf
+│   └── Supplementary Materials.pdf
+├── README.md
+└── src 
+    ├── *.csv --> csv data files
+    ├── WA_County_Boundaries --> Contains shapefiles
+    ├── lung_cancer.Rmd
+    ├── lung_cancer_supplementary.Rmd
+    ├── rcode_cancer.R
+    └── rcode_supplementary.R
+    
+Note: Rmd files contains R code with markdown text. R code files contain raw code ran for analysis. 
